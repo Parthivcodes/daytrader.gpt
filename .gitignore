@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.test-temp/
+.env
+.env.*
+*.toml
+trader/standalone/status.json
+trader/standalone/state-*.json
+trader/standalone/selection-*.json
+trader/standalone/scan.json
+trader/standalone/verification.json
+trader/standalone/events.jsonl
+trader/standalone/runner.lock
+trader/standalone/*.tmp
+trader/standalone/PAUSE_ENTRIES
