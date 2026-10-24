@@ -6,16 +6,22 @@ the deployed /healthz endpoint every five minutes, weekdays 12:03-21:58 UTC
 On Monday October 26, 2026, monitoring begins at 17:33 IST, before the 19:00 IST
 market opening. Each request can wake an idle Render Free service.
 
-It uses only standard ubuntu-latest runners in a public repository, with no
-broker credentials, dashboard access code, repository token permissions,
-paid runners, artifacts, or new paid services. If repository visibility
-changes to private, the workflow job is skipped.
+It uses only standard ubuntu-latest runners in a public repository. No Alpaca
+trading credentials or paid resources are used. User-approved encrypted
+Actions secrets provide the email API key, recipient and read-only dashboard
+access code. Repository contents permission is read-only. If repository
+visibility changes to private, the workflow job is skipped.
 
 The check verifies the public runner-alive flag and configured limits. It
 cannot certify broker connectivity, fills, protective orders or exit success.
 Actual broker orders and positions remain in the authenticated dashboard,
 which polls every five seconds while open and marks unsuccessful updates.
 It does not generate trades to test the feed.
+
+The independent email monitor also reads broker fills through the private
+dashboard. See EMAIL-ALERTS.md. Notification checkpoints contain only exchange
+session timestamps, incident timestamps and one-way event hashes, never
+credentials, email addresses, symbols, order prices or quantities.
 
 Limitations: GitHub schedules can be delayed or dropped, and public-repository
 schedules are disabled after 60 days without repository activity. Render may

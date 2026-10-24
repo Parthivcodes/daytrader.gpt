@@ -10,7 +10,8 @@ on:
     branches: [main]
     paths: ['.github/workflows/daytrader-health.yml']
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
   group: daytrader-health
@@ -19,11 +20,20 @@ concurrency:
 jobs:
   check:
     # Standard hosted runner is free on this public repository. Never use
-    # larger/paid runners or put broker/dashboard credentials in this job.
+    # larger/paid runners. No Alpaca trading credentials are used; email and
+    # read-only dashboard access are provided only through encrypted secrets.
     if: github.repository == 'Parthivcodes/daytrader.gpt' && github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
+      - uses: actions/checkout@v4
+      - name: Restore notification checkpoint
+        id: notification-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .monitor-state
+          key: daytrader-notifications-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: daytrader-notifications-v1-
       - name: Wake service and verify paper runner
         shell: bash
         run: |
@@ -53,3 +63,16 @@ jobs:
                       raise SystemExit('Daytrader health check failed. Review private Render logs.')
                   time.sleep(10)
           PY
+      - name: Email confirmed fills and market-hours incidents
+        if: always()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+          DAYTRADER_DASHBOARD_PASSWORD: ${{ secrets.DAYTRADER_DASHBOARD_PASSWORD }}
+        run: python scripts/email_monitor.py
+      - name: Save notification checkpoint
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .monitor-state
+          key: daytrader-notifications-v1-${{ github.run_id }}-${{ github.run_attempt }}
