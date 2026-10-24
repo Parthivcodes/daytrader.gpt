@@ -1,0 +1,32 @@
+[Unit]
+Description=Always Free Alpaca PAPER trader
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=alpaca-paper
+Group=alpaca-paper
+WorkingDirectory=/opt/daytrader.gpt
+EnvironmentFile=/etc/alpaca-paper.env
+Environment=TRADER_CLOUD=true
+Environment=TRADER_STATE_DIR=/var/lib/alpaca-paper
+Environment=TRADER_DISK_MOUNT=/
+Environment=PYTHONUNBUFFERED=1
+StateDirectory=alpaca-paper
+StateDirectoryMode=0700
+ExecStart=/opt/daytrader.gpt/.venv/bin/python -u /opt/daytrader.gpt/trader/standalone/runner.py
+Restart=always
+RestartSec=10
+TimeoutStopSec=120
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/alpaca-paper
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

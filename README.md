@@ -1,72 +1,71 @@
-# Alpaca paper day trader
+# Free-only cloud deployment
 
-Single-instance, always-on Python background worker. No Codex session, OpenAI
-API, laptop, or browser is required after cloud deployment.
+No paid cloud service has been created. The paid Render Blueprint was removed.
+Deploy only on an Oracle Always Free-eligible VM with available quota in the
+account's home region. Never upgrade the account or select paid add-ons.
 
-**Limits:** paper-only API, $5,000 capital ceiling, $100 maximum planned risk per
-trade. The automatic strategy currently uses at most $3,750 and $90 planned
-risk, one attempted trade per session, long whole shares only. Stop slippage
-can exceed planned risk. This is experimental paper trading, not a proven or
-backtested profitable strategy.
+Suggested VM: Always Free VM.Standard.E2.1.Micro (1 GB RAM), eligible Ubuntu
+image and a 50 GB boot disk. Alternative: eligible A1.Flex, 1 OCPU / 1 GB RAM.
+Verify the Always Free labels and existing account quotas before provisioning.
+Use included public connectivity; no paid NAT gateway, load balancer or image.
+Restrict inbound SSH to the operator's IP. No public HTTP service is needed.
 
-Scans AAPL, MSFT, NVDA, AMZN, GOOGL, META and SPY using IEX. Uses a 15-minute
-opening-range breakout confirmed by a completed five-minute bar, volume and
-VWAP; fresh quote/spread checks; broker-held bracket stop and 2R take profit.
-Cancels unfilled entries after three minutes. Starts timed exits one minute
-before the earlier of 01:25 IST next day or five minutes before exchange close.
+Free capacity may be unavailable and Oracle can reclaim low-utilization VMs.
+This is not a guarantee of uninterrupted trading or timely exits. Do not
+generate artificial load to defeat the provider's idle-reclamation rules.
 
-## Render deployment
+The bot keeps the PAPER-only $5,000 capital ceiling and $100 planned-risk
+ceiling. Automatic trades use at most $3,750 and $90 planned risk, one trade
+attempt per session, broker-held stop/target orders, and a timed exit beginning
+before 01:25 IST next day (earlier for short exchange sessions). Stop slippage
+can exceed planned risk. This strategy is not backtested or proven profitable.
 
-`render.yaml` defines one background worker (0.5 CPU / 512 MB), with a 1 GB
-persistent disk. Estimated base hosting cost $7.25/month, before taxes, workspace
-charges and usage extras; verify in the Render creation screen.
+## VM installation
 
-Create a Blueprint from this repository in the intended Render workspace.
-Configure `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` as secrets with PAPER account
-credentials. Do not put credentials into source files, commits, chat, or logs.
-Set **`PAPER_ENTRIES_ENABLED=false` for initial deployment**. Cloud startup
-refuses to run without a persistent mount, paper credentials, and an explicit
-entries switch. Review the deploy logs before enabling entries.
+Use Ubuntu 24.04 / Python 3.12. Clone this repository to /opt/daytrader.gpt,
+install python3-venv, create /opt/daytrader.gpt/.venv and install requirements.txt
+into it. Run the test suite before starting the service. Create an unprivileged
+system user and group named alpaca-paper.
 
-Source files remain separate from `/var/data/trader`, where the worker keeps
-its active plan, session reservations, submission intents, lock, and logs.
-Restarting or deploying never overwrites existing trading state. Linux flock
-prevents a second process from using the same state directory. Render disks
-also restrict the service to a single instance. Do not create a second service
-with the same paper credentials; separate hosts do not share an OS lock.
+Create /etc/alpaca-paper.env, owned by root with mode 0600. Add only the PAPER
+credentials there, never in Git or chat:
 
-## Cutover from Windows
+```text
+ALPACA_API_KEY=<paper key>
+ALPACA_SECRET_KEY=<paper secret>
+ALPACA_PAPER_TRADE=true
+PAPER_ENTRIES_ENABLED=false
+```
 
-1. Deploy the cloud worker with `PAPER_ENTRIES_ENABLED=false` and confirm a fresh
-   healthy log heartbeat and successful read-only `--check` against Alpaca.
-2. Check that the account has no open positions or orders. If it does, do not
-   cut over; let the existing runner finish and verify flat first.
-3. Pause local entries, disable and stop Windows task `AlpacaPaperStandalone`,
-   and verify its process has exited. Leave the local pause marker in place.
-4. Recheck broker positions and orders after the local process stops.
-5. Change `PAPER_ENTRIES_ENABLED=true` on Render and deploy. Confirm its new
-   heartbeat. Do not re-enable the local task while the cloud bot is active.
+Copy deploy/alpaca-paper.service to /etc/systemd/system/. Run
+`sudo systemctl daemon-reload` and `sudo systemctl enable --now alpaca-paper`.
+New entries remain paused initially. Systemd restarts the worker after failure
+and at boot. State persists on the boot disk at /var/lib/alpaca-paper.
 
-The worker also checks today's broker order history before a new selection,
-so migrating an already completed daily trade does not reset its allowance.
-If unexplained positions/orders exist without a saved plan, it reports an
-attention state and refuses new entries. Do not delete or restore an older
-state disk without reconciling all broker activity first.
+## Cutover
 
-## Operations
+1. Verify fresh logs with `sudo journalctl -u alpaca-paper -n 30` and read-only
+   Alpaca connectivity. Ensure no account positions or orders are open.
+2. Pause entries on the laptop, disable and stop Windows task
+   AlpacaPaperStandalone, and verify its process has exited.
+3. Recheck the broker is flat. If anything remains, reconcile before cutover.
+4. Change PAPER_ENTRIES_ENABLED to true in the environment file, restart the
+   cloud service, and verify its new heartbeat. Never run both hosts at once.
 
-- Read status from Render logs (state changes immediately; routine heartbeat
-  every five minutes). Local state is at `/var/data/trader/status.json`.
-- Read-only connection check: `python trader/standalone/runner.py --check`.
-- To pause new entries set `PAPER_ENTRIES_ENABLED=false` and deploy, or create
-  `/var/data/trader/PAUSE_ENTRIES` in the service shell. Existing exits continue.
-- Never suspend the worker or remove its disk with an open trade. Timed exits
-  depend on the worker and Alpaca availability; stop/target legs stay at Alpaca.
-- Automatic deploys are disabled. Prefer changes outside trading hours while
-  flat: a disk-backed deploy briefly interrupts the worker.
-- A SIGTERM stops after the current reconciliation cycle; durable intents and
-  broker client IDs prevent blind order resubmission on restart.
-- Broker credentials are read from environment variables in cloud mode. The
-  Windows-only config fallback is disabled for cloud deployments.
+To pause new entries, set the switch false and restart, or create the file
+/var/lib/alpaca-paper/PAUSE_ENTRIES. Existing exits continue. Do not stop the
+service with an open trade; timed exits require both the runner and Alpaca.
+The broker-held stops and targets do not require Codex or the cloud process.
 
-Run offline tests with `python -m unittest discover -s tests -p test_standalone.py -v`.
+Durable intents, stable order IDs and broker history protect against duplicate
+orders and resetting the daily allowance. Linux flock excludes concurrent
+processes on this disk, not independent hosts. Never delete or restore older
+state files without first reconciling actual broker activity.
+
+The cloud service is **not deployed yet**. Account access, free capacity,
+installation, verification and the laptop-to-cloud cutover remain required.
+
+Sources checked October 24, 2026:
+- [Oracle Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
+- [Oracle free account rules](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier.htm)
+- [Render free limitations](https://render.com/docs/free)
