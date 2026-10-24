@@ -24,7 +24,7 @@ jobs:
     # read-only dashboard access are provided only through encrypted secrets.
     if: github.repository == 'Parthivcodes/daytrader.gpt' && github.event.repository.private == false
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Restore notification checkpoint
@@ -46,7 +46,7 @@ jobs:
           for attempt in range(3):
               try:
                   request = urllib.request.Request(url, headers={'User-Agent': 'Daytrader-Health-Monitor/1.0'})
-                  with urllib.request.urlopen(request, timeout=60) as response:
+                  with urllib.request.urlopen(request, timeout=25) as response:
                       status = json.load(response)
                   assert status.get('service') == 'Daytrader', 'Unexpected service'
                   assert status.get('hosting') == 'Render Free', 'Unexpected hosting configuration'

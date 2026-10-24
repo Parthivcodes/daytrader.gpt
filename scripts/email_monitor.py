@@ -32,9 +32,9 @@ def read_dashboard():
     request=urllib.request.Request(BASE+'/login',method='POST',
         data=json.dumps({'password':os.environ['DAYTRADER_DASHBOARD_PASSWORD']}).encode(),
         headers={'Content-Type':'application/json','X-Daytrader':'dashboard'})
-    with client.open(request,timeout=60) as response:
+    with client.open(request,timeout=20) as response:
         if response.status!=200:raise RuntimeError('Dashboard login failed')
-    with client.open(BASE+'/api/state',timeout=60) as response:return json.load(response)
+    with client.open(BASE+'/api/state',timeout=20) as response:return json.load(response)
 
 
 def in_session(state,now):
