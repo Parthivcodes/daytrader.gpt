@@ -9,4 +9,4 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt
-      - run: python -m unittest discover -s tests -p test_standalone.py -v
+      - run: python -m unittest discover -s tests -p "test_*.py" -v

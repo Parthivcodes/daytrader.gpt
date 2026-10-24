@@ -2,6 +2,7 @@
 import datetime as dt
 from decimal import Decimal as D, ROUND_FLOOR, ROUND_CEILING
 import json
+import os
 from zoneinfo import ZoneInfo
 import urllib.parse
 
@@ -96,7 +97,7 @@ def select_next(broker, root, now):
     history = broker.call('/orders?'+urllib.parse.urlencode(dict(status='all',after=after,limit=500,direction='desc')))
     if len(history) >= 500:
         return 'attention: session order history truncated; no new entry'
-    if any(o.get('client_order_id','').startswith('auto-orb-'+day.strftime('%Y%m%d')+'-') for o in history):
+    if any(o.get('client_order_id','').startswith('auto-orb-'+day.strftime('%Y%m%d')) for o in history):
         return 'idle: broker records show daily trade allowance used'
     scan_path = root/'scan.json'
     if scan_path.exists() and (now-instant(json.loads(scan_path.read_text())['at'])).total_seconds()<60:
@@ -119,7 +120,9 @@ def select_next(broker, root, now):
     if not choices:
         return 'scanning'
     best = max(choices,key=lambda x:(x['score'],x['symbol']))
-    cid = 'auto-orb-'+day.strftime('%Y%m%d')+'-'+best['symbol']
+    cid = 'auto-orb-'+day.strftime('%Y%m%d')
+    if os.environ.get('TRADER_STORAGE') != 'broker':
+        cid += '-'+best['symbol']
     plan = {k:best[k] for k in ('symbol','qty','entry','stop','target')}
     plan.update(paper=True,mode='armed',client_order_id=cid,exit_client_order_id=cid+'-exit',
         entry_after=now.isoformat(),cancel_at=(now+dt.timedelta(minutes=3)).isoformat(),

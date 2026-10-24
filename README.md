@@ -1,71 +1,66 @@
-# Free-only cloud deployment
+# Alpaca paper trader on Render Free
 
-No paid cloud service has been created. The paid Render Blueprint was removed.
-Deploy only on an Oracle Always Free-eligible VM with available quota in the
-account's home region. Never upgrade the account or select paid add-ons.
+Requested hosting: **Render Free only**. No paid worker, disk or database.
+Uses a free Python web service, serving a minimal public status endpoint and
+supervising the paper-trading runner. No public order controls, account
+balances, order details, or credentials are exposed.
 
-Suggested VM: Always Free VM.Standard.E2.1.Micro (1 GB RAM), eligible Ubuntu
-image and a 50 GB boot disk. Alternative: eligible A1.Flex, 1 OCPU / 1 GB RAM.
-Verify the Always Free labels and existing account quotas before provisioning.
-Use included public connectivity; no paid NAT gateway, load balancer or image.
-Restrict inbound SSH to the operator's IP. No public HTTP service is needed.
+**Not an always-on service:** Render Free sleeps after 15 minutes without
+incoming traffic and can restart or be suspended at quota limits. Background
+API polling does not prevent sleep. Broker-held stop/target orders remain at
+Alpaca, but new entries, unfilled-entry cancellation, and timed exits only run
+while Render is awake. The 01:25 IST exit deadline cannot be guaranteed.
+No self-pings or artificial traffic are installed to bypass free-plan limits.
 
-Free capacity may be unavailable and Oracle can reclaim low-utilization VMs.
-This is not a guarantee of uninterrupted trading or timely exits. Do not
-generate artificial load to defeat the provider's idle-reclamation rules.
+Hard limits remain PAPER only, $5,000 capital and $100 planned risk per trade.
+Automatic sizing uses at most $3,750 and $90 planned risk, with one entry per
+US session. Stop slippage can exceed planned risk. The experimental breakout
+strategy is not backtested or guaranteed profitable.
 
-The bot keeps the PAPER-only $5,000 capital ceiling and $100 planned-risk
-ceiling. Automatic trades use at most $3,750 and $90 planned risk, one trade
-attempt per session, broker-held stop/target orders, and a timed exit beginning
-before 01:25 IST next day (earlier for short exchange sessions). Stop slippage
-can exceed planned risk. This strategy is not backtested or proven profitable.
+## Recovery without paid storage
 
-## VM installation
+Alpaca is the durable order ledger. On startup the runner reconstructs an
+unfinished strategy bracket from the broker, including its protective prices
+and exchange-session deadline, before allowing new selections. It refuses
+unowned positions, missing bracket information or truncated history. Current
+day history prevents another trade after a completed/canceled entry.
 
-Use Ubuntu 24.04 / Python 3.12. Clone this repository to /opt/daytrader.gpt,
-install python3-venv, create /opt/daytrader.gpt/.venv and install requirements.txt
-into it. Run the test suite before starting the service. Create an unprivileged
-system user and group named alpaca-paper.
+Free-host entry IDs use `auto-orb-YYYYMMDD`, independent of the chosen symbol,
+and exits append `-exit`. Stable broker client IDs prevent a restart from
+creating a second order for the same session. Local files are only a cache;
+they are lost when Render restarts. Previously accepted strategy orders remain
+discoverable at Alpaca. No durable record of an attempt that never reached
+Alpaca can survive a complete cache loss.
 
-Create /etc/alpaca-paper.env, owned by root with mode 0600. Add only the PAPER
-credentials there, never in Git or chat:
+## Service configuration
 
-```text
-ALPACA_API_KEY=<paper key>
-ALPACA_SECRET_KEY=<paper secret>
-ALPACA_PAPER_TRADE=true
-PAPER_ENTRIES_ENABLED=false
-```
+- Runtime Python 3.12, plan **free**, region Oregon, one instance.
+- Build: `pip install -r requirements.txt` followed by offline tests with cloud
+  runtime environment switches unset for test isolation.
+- Start: `python -u trader/standalone/web.py`.
+- Secrets: ALPACA_API_KEY, ALPACA_SECRET_KEY (paper credentials only).
+- ALPACA_PAPER_TRADE=true, TRADER_CLOUD=true, TRADER_STORAGE=broker.
+- TRADER_STATE_DIR=/tmp/paper-trader.
+- PAPER_ENTRIES_ENABLED=false initially; true only after safe cutover.
+- Auto-deploy off. No disk, database, cron job, paid plan, or paid add-on.
 
-Copy deploy/alpaca-paper.service to /etc/systemd/system/. Run
-`sudo systemctl daemon-reload` and `sudo systemctl enable --now alpaca-paper`.
-New entries remain paused initially. Systemd restarts the worker after failure
-and at boot. State persists on the boot disk at /var/lib/alpaca-paper.
+Verify healthy broker reconciliation in private Render logs. The public page
+reports only whether the runner process is alive, not broker health. Pause
+entries by setting PAPER_ENTRIES_ENABLED=false and deploying; exits continue
+while the service is awake. Do not suspend a service with an open paper trade.
 
-## Cutover
+Before enabling cloud entries, verify the paper account is flat, pause and
+disable the Windows task AlpacaPaperStandalone, stop its process, then recheck
+the account. Do not run both hosts at once. Keep the local pause marker in place.
 
-1. Verify fresh logs with `sudo journalctl -u alpaca-paper -n 30` and read-only
-   Alpaca connectivity. Ensure no account positions or orders are open.
-2. Pause entries on the laptop, disable and stop Windows task
-   AlpacaPaperStandalone, and verify its process has exited.
-3. Recheck the broker is flat. If anything remains, reconcile before cutover.
-4. Change PAPER_ENTRIES_ENABLED to true in the environment file, restart the
-   cloud service, and verify its new heartbeat. Never run both hosts at once.
+Free hours are shared across the Render workspace. Bandwidth/build usage may
+have overage rules if a payment method is present; this deployment does not
+upgrade plans or change billing settings for other services. Check the
+workspace's free quotas and spending controls. Exceeding free availability
+must not be resolved by enabling a paid service.
 
-To pause new entries, set the switch false and restart, or create the file
-/var/lib/alpaca-paper/PAUSE_ENTRIES. Existing exits continue. Do not stop the
-service with an open trade; timed exits require both the runner and Alpaca.
-The broker-held stops and targets do not require Codex or the cloud process.
+Sources: [Render free limits](https://render.com/docs/free),
+[Alpaca order IDs and bracket orders](https://docs.alpaca.markets/us/docs/orders-at-alpaca).
 
-Durable intents, stable order IDs and broker history protect against duplicate
-orders and resetting the daily allowance. Linux flock excludes concurrent
-processes on this disk, not independent hosts. Never delete or restore older
-state files without first reconciling actual broker activity.
-
-The cloud service is **not deployed yet**. Account access, free capacity,
-installation, verification and the laptop-to-cloud cutover remain required.
-
-Sources checked October 24, 2026:
-- [Oracle Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
-- [Oracle free account rules](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier.htm)
-- [Render free limitations](https://render.com/docs/free)
+Offline tests: `python -m unittest discover -s tests -p "test_*.py" -v`.
+The alternative VM setup is retained in FREE-CLOUD.md for reference only.

@@ -273,9 +273,10 @@ def initialize_state():
     if os.environ.get('TRADER_CLOUD') == 'true':
         if os.environ.get('PAPER_ENTRIES_ENABLED') not in {'true', 'false'}:
             raise ValueError('Cloud requires explicit PAPER_ENTRIES_ENABLED=true or false')
-        mount = Path(os.environ.get('TRADER_DISK_MOUNT', '/var/data'))
-        if ROOT == SOURCE or not ROOT.is_relative_to(mount.resolve()) or not os.path.ismount(mount):
-            raise ValueError('Cloud requires a mounted persistent disk for all state')
+        if os.environ.get('TRADER_STORAGE') != 'broker':
+            mount = Path(os.environ.get('TRADER_DISK_MOUNT', '/var/data'))
+            if ROOT == SOURCE or not ROOT.is_relative_to(mount.resolve()) or not os.path.ismount(mount):
+                raise ValueError('Cloud requires a mounted persistent disk for all state')
     ROOT.mkdir(parents=True, exist_ok=True)
 
 
@@ -316,6 +317,9 @@ def main():
     last_log = 0
     try:
         seed_state()
+        if os.environ.get('TRADER_STORAGE') == 'broker':
+            from recovery import recover
+            recover(Broker(), ROOT, utc())
         while not stop.is_set():
             active = False
             try:
