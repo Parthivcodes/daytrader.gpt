@@ -10,7 +10,8 @@ incoming traffic and can restart or be suspended at quota limits. Background
 API polling does not prevent sleep. Broker-held stop/target orders remain at
 Alpaca, but new entries, unfilled-entry cancellation, and timed exits only run
 while Render is awake. The 01:25 IST exit deadline cannot be guaranteed.
-No self-pings or artificial traffic are installed to bypass free-plan limits.
+A free external GitHub health monitor now checks every five minutes during
+weekday market hours. See MARKET-HEALTH-MONITOR.md for schedule and limitations.
 
 Hard limits remain PAPER only, $5,000 capital and $100 planned risk per trade.
 Automatic sizing uses at most $3,750 and $90 planned risk, with one entry per
